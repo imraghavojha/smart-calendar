@@ -7,36 +7,6 @@ from pathlib import Path
 from src.calendar_manager import CalendarManager
 
 class RulesManager:
-    def get_scheduling_constraints(self):
-    """Return all scheduling constraints for the LLM"""
-    
-    # First load/reload rules
-    self.load_rules()
-    
-    # Return constraints dictionary
-    return {
-        'fixed_events': [
-            {
-                'summary': event['summary'],
-                'days': event['days'],
-                'start_time': event['start_time'].strftime('%H:%M'),
-                'end_time': event['end_time'].strftime('%H:%M'),
-                'type': event['type']
-            }
-            for event in self.fixed_events
-        ],
-        'blocked_times': [
-            {
-                'summary': block['summary'],
-                'days': block['days'],
-                'start_time': block['start_time'].strftime('%H:%M'),
-                'end_time': block['end_time'].strftime('%H:%M'),
-                'type': block['type']
-            }
-            for block in self.blocked_times
-        ],
-        'preferences': self.preferences
-    }
     def __init__(self, calendar_manager):
         self.calendar_manager = calendar_manager
         self.timezone = ZoneInfo('Asia/Kolkata')
@@ -46,6 +16,36 @@ class RulesManager:
         self.fixed_events = []     # Regular events like classes
         self.blocked_times = []    # Times when no tasks should be scheduled
         self.preferences = []      # Preferred times for certain activities
+
+    def get_scheduling_constraints(self):
+        """Return all scheduling constraints for the LLM"""
+        # First load/reload rules
+        self.load_rules()
+        
+        # Return constraints dictionary
+        return {
+            'fixed_events': [
+                {
+                    'summary': event['summary'],
+                    'days': event['days'],
+                    'start_time': event['start_time'].strftime('%H:%M'),
+                    'end_time': event['end_time'].strftime('%H:%M'),
+                    'type': event['type']
+                }
+                for event in self.fixed_events
+            ],
+            'blocked_times': [
+                {
+                    'summary': block['summary'],
+                    'days': block['days'],
+                    'start_time': block['start_time'].strftime('%H:%M'),
+                    'end_time': block['end_time'].strftime('%H:%M'),
+                    'type': block['type']
+                }
+                for block in self.blocked_times
+            ],
+            'preferences': self.preferences
+        }
 
     def load_rules(self):
         """Load and parse rules from rules.txt"""

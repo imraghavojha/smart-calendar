@@ -1,6 +1,6 @@
 google-auth-oauthlib
 google-api-python-client
-anthropic
+requests
 python-dotenv
 pytz
 icalendar

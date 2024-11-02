@@ -2,15 +2,15 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
-# Install requirements
+# Install Ollama dependencies
+RUN apt-get update && apt-get install -y curl
+
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# Copy application code
 COPY . .
 
-# Create necessary directories and empty env file
-RUN mkdir -p config cache && touch .env
-
-# Default command
 CMD ["python", "-m", "src.llm_scheduler"]
