@@ -39,26 +39,6 @@
                 "after team standups",
                 "when energy is high"
             ]
-        },
-        "meeting": {
-            "activities": [
-                "Team Meeting",
-                "Project Sync",
-                "Mentor Session",
-                "Group Study",
-                "Office Hours"
-            ],
-            "durations": {
-                "min": 0.5,
-                "max": 2,
-                "unit": "hours"
-            },
-            "preferences": [
-                "during work hours",
-                "not during meal times",
-                "with buffer before/after",
-                "not back to back"
-            ]
         }
     },
     "fixed_schedules": {
@@ -106,10 +86,6 @@
             "project": {
                 "start": 13,
                 "end": 18
-            },
-            "meeting": {
-                "start": 10,
-                "end": 16
             }
         },
         "buffer_times": {

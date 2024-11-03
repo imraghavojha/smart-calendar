@@ -1,0 +1,29 @@
+{
+    "model": {
+        "name": "t5-large",
+        "max_length": 512,
+        "batch_size": 4,
+        "learning_rate": 1e-5,
+        "epochs": 3,
+        "gradient_accumulation_steps": 4,
+        "warmup_steps": 100,
+        "weight_decay": 0.01
+    },
+    "data": {
+        "train_examples": 1000,
+        "validation_split": 0.1,
+        "max_examples_per_type": 200,
+        "min_examples_per_type": 50
+    },
+    "output": {
+        "model_dir": "trained_models",
+        "checkpoint_dir": "checkpoints",
+        "log_dir": "logs"
+    },
+    "optimization": {
+        "quantize": true,
+        "quantization_type": "dynamic",
+        "target_size": "int8",
+        "pruning": false
+    }
+}

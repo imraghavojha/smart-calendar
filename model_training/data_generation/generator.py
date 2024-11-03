@@ -2,51 +2,89 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 import random
-from typing import Dict, List, Any
+from typing import Dict, List
+import logging
 
 class SchedulingDataGenerator:
     def __init__(self):
-        # Load configurations
+        self.logger = logging.getLogger(__name__)
         config_path = Path(__file__).parent.parent / 'config'
-        with open(config_path / 'scheduling_patterns.json') as f:
-            self.patterns = json.load(f)
+        
+        # Load configurations
         with open(config_path / 'training_config.json') as f:
             self.config = json.load(f)
+        with open(config_path / 'scheduling_patterns.json') as f:
+            self.patterns = json.load(f)
+            
+        self.output_dir = Path(__file__).parent.parent.parent / 'models' / 'data'
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.current_date = datetime.now()
+    def create_datasets(self):
+        """Create and save training and validation datasets"""
+        self.logger.info("Generating datasets...")
+        
+        # Generate examples
+        all_examples = self.generate_dataset(
+            self.config['data']['train_examples']
+        )
+        
+        # Split into train/validation
+        split_idx = int(len(all_examples) * (1 - self.config['data']['validation_split']))
+        train_data = all_examples[:split_idx]
+        val_data = all_examples[split_idx:]
+        
+        # Save datasets
+        self._save_dataset(train_data, 'train')
+        self._save_dataset(val_data, 'validation')
+        
+        self.logger.info(f"Generated {len(train_data)} training and {len(val_data)} validation examples")
 
-    def generate_dataset(self) -> List[Dict[str, str]]:
-        """Generate complete training dataset"""
-        num_examples = self.config['data']['train_examples']
-        dataset = []
-
+    def generate_dataset(self, num_examples: int) -> List[Dict]:
+        """Generate dataset examples"""
+        examples = []
+        
         for _ in range(num_examples):
-            # Generate a single training example
-            example = self._generate_single_example()
-            dataset.append(example)
+            # Select random task type
+            task_type = random.choice(list(self.patterns['task_types'].keys()))
+            task_info = self.patterns['task_types'][task_type]
+            
+            # Generate example
+            example = self._generate_example(task_type, task_info)
+            examples.append(example)
+            
+        return examples
 
-        return dataset
-
-    def _generate_single_example(self) -> Dict[str, str]:
-        """Generate a single training example"""
-        # Select random task type
-        task_type = random.choice(list(self.patterns['task_types'].keys()))
-        task_info = self.patterns['task_types'][task_type]
-
+    def _generate_example(self, task_type: str, task_info: Dict) -> Dict:
+        """Generate single training example"""
         # Generate task details
-        task = {
-            'name': random.choice(task_info['activities']),
-            'type': task_type,
-            'duration': self._generate_duration(task_info['durations']),
-            'deadline': self._generate_deadline(),
-            'preferences': self._select_preferences(task_info['preferences']),
-            'constraints': self._generate_constraints()
-        }
-
-        # Generate input and output formats
+        activity = random.choice(task_info['activities'])
+        duration = self._generate_duration(task_info['durations'])
+        deadline = self._generate_deadline()
+        preferences = random.sample(task_info['preferences'], k=2)
+        
+        # Get relevant fixed schedules
+        constraints = self._get_relevant_constraints()
+        
+        # Format input
+        input_text = self._format_input(
+            activity=activity,
+            duration=duration,
+            deadline=deadline,
+            preferences=preferences,
+            constraints=constraints
+        )
+        
+        # Generate ideal schedule
+        output_text = self._generate_schedule(
+            task_type=task_type,
+            duration=duration,
+            deadline=deadline,
+            constraints=constraints
+        )
+        
         return {
-            'input': self._format_input(task),
-            'output': self._generate_ideal_schedule(task)
+            'input': input_text,
+            'output': output_text
         }
 
     def _generate_duration(self, duration_config: Dict) -> str:
@@ -56,86 +94,74 @@ class SchedulingDataGenerator:
         return f"{hours} {duration_config['unit']}"
 
     def _generate_deadline(self) -> str:
-        """Generate a realistic deadline"""
+        """Generate realistic deadline"""
         days_ahead = random.randint(1, 7)
-        deadline_date = self.current_date + timedelta(days=days_ahead)
-        hour = random.randint(9, 17)  # Business hours
-        deadline_date = deadline_date.replace(hour=hour, minute=0)
-        return deadline_date.strftime("%A %I:%M%p")
+        deadline = datetime.now() + timedelta(days=days_ahead)
+        return deadline.strftime("%A %I:%M%p")
 
-    def _select_preferences(self, available_preferences: List[str]) -> List[str]:
-        """Select relevant preferences"""
-        num_preferences = random.randint(1, 3)
-        return random.sample(available_preferences, k=num_preferences)
-
-    def _generate_constraints(self) -> List[Dict[str, Any]]:
-        """Generate scheduling constraints"""
+    def _get_relevant_constraints(self) -> List[Dict]:
+        """Get relevant schedule constraints"""
         constraints = []
-
-        # Add fixed classes
-        for class_info in random.sample(self.patterns['fixed_schedules']['classes'], 
-                                      k=random.randint(1, 3)):
-            constraints.append({
-                'type': 'fixed',
-                'name': class_info['name'],
-                'days': class_info['days'],
-                'time': class_info['time']
-            })
-
-        # Add routines
-        for routine in self.patterns['fixed_schedules']['routines']:
-            constraints.append({
-                'type': 'routine',
-                'name': routine['name'],
-                'days': routine['days'],
-                'time': routine['time']
-            })
-
+        
+        # Add some fixed classes
+        num_classes = random.randint(1, 3)
+        classes = random.sample(self.patterns['fixed_schedules']['classes'], k=num_classes)
+        constraints.extend(classes)
+        
+        # Add routine constraints
+        constraints.extend(self.patterns['fixed_schedules']['routines'])
+        
         return constraints
 
-    def _format_input(self, task: Dict) -> str:
-        """Format the input for the model"""
-        input_text = f"""Schedule task: {task['name']}
-Duration: {task['duration']}
-Deadline: {task['deadline']}
+    def _format_input(self, activity: str, duration: str, deadline: str,
+                     preferences: List[str], constraints: List[Dict]) -> str:
+        """Format input text"""
+        input_text = f"""Schedule task: {activity}
+Duration: {duration}
+Deadline: {deadline}
 
 Preferences:
-{chr(10).join('- ' + pref for pref in task['preferences'])}
+{chr(10).join('- ' + pref for pref in preferences)}
 
 Constraints:"""
 
-        for constraint in task['constraints']:
-            if constraint['type'] == 'fixed':
-                input_text += f"\n- {constraint['name']} on {constraint['days']} at {constraint['time']}"
-            else:
-                input_text += f"\n- {constraint['name']} {constraint['days']} at {constraint['time']}"
+        for constraint in constraints:
+            input_text += f"\n- {constraint['name']} on {constraint['days']} at {constraint['time']}"
 
         return input_text
 
-    def _generate_ideal_schedule(self, task: Dict) -> str:
-        """Generate ideal schedule based on task and constraints"""
-        # Get preferred hours for task type
-        preferred_hours = self.patterns['time_patterns']['preferred_hours'][task['type']]
+    def _generate_schedule(self, task_type: str, duration: str,
+                          deadline: str, constraints: List[Dict]) -> str:
+        """Generate ideal schedule"""
+        # Get preferred hours
+        preferred = self.patterns['time_patterns']['preferred_hours'][task_type]
         
-        # Find a suitable day (1-3 days before deadline)
-        days_before = random.randint(1, 3)
-        schedule_date = datetime.strptime(task['deadline'], "%A %I:%M%p") - timedelta(days=days_before)
+        # Generate schedule within preferred hours
+        deadline_dt = datetime.strptime(deadline, "%A %I:%M%p")
+        schedule_date = deadline_dt - timedelta(days=random.randint(1, 3))
         
         # Set time within preferred hours
-        hour = random.randint(preferred_hours['start'], preferred_hours['end'])
+        hour = random.randint(preferred['start'], preferred['end'])
         schedule_date = schedule_date.replace(hour=hour, minute=0)
         
-        # Parse duration
-        duration_hours = float(task['duration'].split()[0])
+        # Calculate end time
+        duration_hours = float(duration.split()[0])
         end_date = schedule_date + timedelta(hours=duration_hours)
         
+        # Generate reasoning
         reasons = [
-            f"Scheduled during preferred hours for {task['type']} tasks",
-            f"Allows sufficient buffer time before deadline",
-            f"Avoids conflicts with fixed schedules",
-            f"Matches energy level preferences",
-            f"Provides adequate preparation time"
+            f"Scheduled during preferred hours for {task_type}",
+            "Avoids conflicts with fixed schedules",
+            "Provides buffer time before deadline",
+            f"Optimal time for {task_type} based on preferences"
         ]
 
         return f"""Schedule from {schedule_date.strftime('%Y-%m-%d %H:%M')} to {end_date.strftime('%Y-%m-%d %H:%M')}
 Reason: {random.choice(reasons)}"""
+
+    def _save_dataset(self, data: List[Dict], split_name: str):
+        """Save dataset split"""
+        output_file = self.output_dir / f'{split_name}_data.json'
+        with open(output_file, 'w') as f:
+            json.dump(data, f, indent=2)
+        self.logger.info(f"Saved {split_name} dataset to {output_file}")

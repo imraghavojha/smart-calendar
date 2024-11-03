@@ -7,13 +7,11 @@ from transformers import (
     T5Tokenizer,
     Trainer,
     TrainingArguments,
-    DataCollator,
     EarlyStoppingCallback
 )
 from datasets import Dataset
-import numpy as np
-from typing import Dict, List
 import logging
+from typing import Dict, List
 
 class SchedulerTrainer:
     def __init__(self):
@@ -21,9 +19,12 @@ class SchedulerTrainer:
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
         
-        # Load configs
-        self.model_dir = Path(__file__).parent.parent.parent / 'trained_models'
-        self.config_path = Path(__file__).parent.parent / 'config' / 'training_config.json'
+        # Fix paths based on actual structure
+        root_dir = Path(__file__).parent.parent.parent
+        self.model_dir = root_dir / 'models'
+        self.config_path = root_dir / 'model_training' / 'config' / 'training_config.json'
+        
+        # Load config
         with open(self.config_path) as f:
             self.config = json.load(f)
         
@@ -40,12 +41,19 @@ class SchedulerTrainer:
         """Load and prepare datasets"""
         self.logger.info("Loading datasets...")
         
-        # Load train and validation data
-        train_path = self.model_dir / 'data' / 'train_data.csv'
-        val_path = self.model_dir / 'data' / 'validation_data.csv'
+        # Use existing paths where data is already generated
+        train_path = self.model_dir / 'data' / 'train_data.json'
+        val_path = self.model_dir / 'data' / 'validation_data.json'
         
-        train_df = pd.read_csv(train_path)
-        val_df = pd.read_csv(val_path)
+        # Load JSON data
+        with open(train_path) as f:
+            train_data = json.load(f)
+        with open(val_path) as f:
+            val_data = json.load(f)
+            
+        # Convert to pandas DataFrame
+        train_df = pd.DataFrame(train_data)
+        val_df = pd.DataFrame(val_data)
         
         # Convert to HuggingFace datasets
         self.train_dataset = Dataset.from_pandas(train_df)
@@ -128,6 +136,7 @@ class SchedulerTrainer:
         """Save the trained model"""
         self.logger.info("Saving model...")
         save_dir = self.model_dir / 'final_model'
+        save_dir.mkdir(exist_ok=True)
         
         # Save model and tokenizer
         self.model.save_pretrained(save_dir)
@@ -139,28 +148,18 @@ class SchedulerTrainer:
     def quantize_model(self, model_dir: Path):
         """Quantize the model to reduce size"""
         self.logger.info("Quantizing model...")
-        
-        # Load model for quantization
-        model = T5ForConditionalGeneration.from_pretrained(model_dir)
+        quantized_dir = self.model_dir / 'quantized_model'
+        quantized_dir.mkdir(exist_ok=True)
         
         # Quantize
         quantized_model = torch.quantization.quantize_dynamic(
-            model,
+            self.model,
             {torch.nn.Linear},
             dtype=torch.qint8
         )
         
         # Save quantized model
-        quantized_dir = self.model_dir / 'quantized_model'
         quantized_model.save_pretrained(quantized_dir)
         self.tokenizer.save_pretrained(quantized_dir)
         
         self.logger.info(f"Quantized model saved to {quantized_dir}")
-
-def main():
-    trainer = SchedulerTrainer()
-    trainer.prepare_data()
-    trainer.train()
-
-if __name__ == "__main__":
-    main()

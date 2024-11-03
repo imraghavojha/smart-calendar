@@ -1,16 +1,25 @@
 FROM python:3.9-slim
 
-WORKDIR /app
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama dependencies
-RUN apt-get update && apt-get install -y curl
+WORKDIR /smart-calendar
 
-# Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
-
+# Install Python requirements
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy all files
 COPY . .
 
-CMD ["python", "-m", "src.llm_scheduler"]
+# Create any missing directories
+RUN mkdir -p models/data models/logs
+
+# Add project root to Python path
+ENV PYTHONPATH="${PYTHONPATH}:/smart-calendar"
+
+CMD ["python", "test_run.py"]
