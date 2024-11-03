@@ -11,3 +11,6 @@ scikit-learn
 tqdm
 sentencepiece
 protobuf
+psutil
+tensorboard
+pandas
