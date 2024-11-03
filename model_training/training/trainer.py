@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 import json
 import pandas as pd
@@ -11,8 +12,7 @@ from transformers import (
     TrainerCallback
 )
 from datasets import Dataset
-import logging
-from typing import Dict, List
+from tqdm.auto import tqdm
 import psutil
 
 class SchedulerTrainer:
@@ -32,7 +32,7 @@ class SchedulerTrainer:
         
         # Initialize model and tokenizer
         self.logger.info("Initializing T5-Large model and tokenizer...")
-        self.tokenizer = T5Tokenizer.from_pretrained('t5-large', model_max_length=512)
+        self.tokenizer = T5Tokenizer.from_pretrained('t5-large', model_max_length=256)
         self.model = T5ForConditionalGeneration.from_pretrained('t5-large')
         
         # Setup device
@@ -51,9 +51,11 @@ class SchedulerTrainer:
         train_path = self.model_dir / 'data' / 'train_data.json'
         val_path = self.model_dir / 'data' / 'validation_data.json'
         
-        # Load JSON data
+        # Load JSON data with progress indication
+        self.logger.info("Loading training data...")
         with open(train_path) as f:
             train_data = json.load(f)
+        self.logger.info("Loading validation data...")
         with open(val_path) as f:
             val_data = json.load(f)
             
@@ -67,19 +69,25 @@ class SchedulerTrainer:
         self.train_dataset = Dataset.from_pandas(train_df)
         self.val_dataset = Dataset.from_pandas(val_df)
         
-        # Tokenize datasets
-        self.logger.info("Tokenizing datasets...")
+        # Tokenize datasets with progress bars
+        self.logger.info("Tokenizing training data...")
         self.train_dataset = self.train_dataset.map(
             self._tokenize_data,
             batched=True,
+            batch_size=32,
             remove_columns=self.train_dataset.column_names,
-            desc="Tokenizing training data"
+            desc="Tokenizing training data",
+            load_from_cache_file=False
         )
+        
+        self.logger.info("Tokenizing validation data...")
         self.val_dataset = self.val_dataset.map(
             self._tokenize_data,
             batched=True,
+            batch_size=32,
             remove_columns=self.val_dataset.column_names,
-            desc="Tokenizing validation data"
+            desc="Tokenizing validation data",
+            load_from_cache_file=False
         )
         
         self.logger.info("Data preparation completed")
@@ -93,7 +101,6 @@ class SchedulerTrainer:
             truncation=True
         )
         
-        # Tokenize targets
         with self.tokenizer.as_target_tokenizer():
             labels = self.tokenizer(
                 examples['output'],
@@ -113,7 +120,7 @@ class SchedulerTrainer:
         total_steps = len(self.train_dataset) * self.config['model']['epochs']
         self.logger.info(f"Total training steps: {total_steps}")
         
-        # Prepare training arguments with progress reporting
+        # Prepare training arguments
         training_args = TrainingArguments(
             output_dir=str(self.model_dir / 'checkpoints'),
             num_train_epochs=self.config['model']['epochs'],
@@ -134,20 +141,6 @@ class SchedulerTrainer:
             disable_tqdm=False
         )
         
-        # Custom progress callback
-        class ProgressCallback(TrainerCallback):
-            def __init__(self, logger):
-                self.logger = logger
-                
-            def on_step_end(self, args, state, control, **kwargs):
-                if state.global_step % 50 == 0:
-                    if state.log_history:
-                        self.logger.info(
-                            f"Step: {state.global_step}/{state.max_steps} "
-                            f"Loss: {state.log_history[-1].get('loss', 'N/A'):.4f} "
-                            f"Learning rate: {state.log_history[-1].get('learning_rate', 'N/A'):.2e}"
-                        )
-        
         # Initialize trainer with callbacks
         trainer = Trainer(
             model=self.model,
@@ -155,22 +148,17 @@ class SchedulerTrainer:
             train_dataset=self.train_dataset,
             eval_dataset=self.val_dataset,
             tokenizer=self.tokenizer,
-            callbacks=[
-                EarlyStoppingCallback(early_stopping_patience=3),
-                ProgressCallback(self.logger)
-            ]
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
         )
         
         # Train with progress tracking
         try:
-            self.logger.info("Starting training loop...")
             trainer.train()
             self.logger.info("Training completed successfully!")
         except Exception as e:
             self.logger.error(f"Training failed: {str(e)}", exc_info=True)
             raise
         finally:
-            # Save final model
             self.save_model()
 
     def save_model(self):
@@ -185,8 +173,6 @@ class SchedulerTrainer:
         
         if self.config['optimization']['quantize']:
             self.quantize_model(save_dir)
-            
-        self.logger.info(f"Model saved to {save_dir}")
 
     def quantize_model(self, model_dir: Path):
         """Quantize the model to reduce size"""
