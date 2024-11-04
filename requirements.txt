@@ -4,14 +4,5 @@ requests
 python-dotenv
 pytz
 icalendar
-transformers==4.33.0
-torch==2.0.1
-accelerate==0.20.3
-datasets
-scikit-learn
-tqdm
-sentencepiece
-protobuf
-psutil
-tensorboard
-pandas
+groq
+python-dotenv

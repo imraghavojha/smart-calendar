@@ -1,25 +1,18 @@
 FROM python:3.9-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-WORKDIR /smart-calendar
-
-# Install Python requirements
+# Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all files
+# Copy application code
 COPY . .
 
-# Create any missing directories
-RUN mkdir -p models/data models/logs
+# Create necessary directories
+RUN mkdir -p config cache
 
-# Add project root to Python path
-ENV PYTHONPATH="${PYTHONPATH}:/smart-calendar"
+# Environment variables will be passed during runtime
+ENV PYTHONPATH=/app
 
-CMD ["python", "test_run.py"]
+CMD ["python", "-m", "src.test_calendar"]
