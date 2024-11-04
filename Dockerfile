@@ -15,5 +15,5 @@ RUN mkdir -p config cache
 # Environment variables will be passed during runtime
 ENV PYTHONPATH=/app
 
-# Change this line to run test_groq.py instead
-CMD ["python", "-m", "src.test_groq"]
+# Change to test smart_scheduler
+CMD ["python", "-m", "src.smart_scheduler"]
