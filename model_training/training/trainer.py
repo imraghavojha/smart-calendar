@@ -44,7 +44,7 @@ class SchedulerTrainer:
         ram = psutil.virtual_memory()
         self.logger.info(f"Available RAM: {ram.available / 1e9:.1f}GB")
 
-        def prepare_data(self):
+    def prepare_data(self):
         """Load and prepare datasets with visible progress"""
         self.logger.info("Loading datasets...")
         
@@ -89,8 +89,6 @@ class SchedulerTrainer:
         )
         
         print("\nData preparation completed! Starting training...")
-        
-        self.logger.info("Data preparation completed")
 
     def _tokenize_data(self, examples):
         """Tokenize inputs and outputs"""
@@ -173,6 +171,8 @@ class SchedulerTrainer:
         
         if self.config['optimization']['quantize']:
             self.quantize_model(save_dir)
+            
+        self.logger.info(f"Model saved to {save_dir}")
 
     def quantize_model(self, model_dir: Path):
         """Quantize the model to reduce size"""
