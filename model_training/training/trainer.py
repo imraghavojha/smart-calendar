@@ -44,18 +44,18 @@ class SchedulerTrainer:
         ram = psutil.virtual_memory()
         self.logger.info(f"Available RAM: {ram.available / 1e9:.1f}GB")
 
-    def prepare_data(self):
-        """Load and prepare datasets"""
+        def prepare_data(self):
+        """Load and prepare datasets with visible progress"""
         self.logger.info("Loading datasets...")
         
         train_path = self.model_dir / 'data' / 'train_data.json'
         val_path = self.model_dir / 'data' / 'validation_data.json'
         
-        # Load JSON data with progress indication
-        self.logger.info("Loading training data...")
+        print("\nProcessing training data...")
         with open(train_path) as f:
             train_data = json.load(f)
-        self.logger.info("Loading validation data...")
+        
+        print("Processing validation data...")
         with open(val_path) as f:
             val_data = json.load(f)
             
@@ -63,32 +63,32 @@ class SchedulerTrainer:
         train_df = pd.DataFrame(train_data)
         val_df = pd.DataFrame(val_data)
         
-        self.logger.info(f"Loaded {len(train_df)} training and {len(val_df)} validation examples")
+        print(f"\nDataset loaded: {len(train_df)} training, {len(val_df)} validation examples")
         
         # Convert to HuggingFace datasets
         self.train_dataset = Dataset.from_pandas(train_df)
         self.val_dataset = Dataset.from_pandas(val_df)
         
-        # Tokenize datasets with progress bars
-        self.logger.info("Tokenizing training data...")
+        # Tokenize with visible progress
+        print("\nTokenizing datasets (this may take a few minutes)...")
+        
         self.train_dataset = self.train_dataset.map(
             self._tokenize_data,
             batched=True,
-            batch_size=32,
+            batch_size=16,  # Smaller batch size
             remove_columns=self.train_dataset.column_names,
-            desc="Tokenizing training data",
-            load_from_cache_file=False
+            desc="Tokenizing training data"
         )
         
-        self.logger.info("Tokenizing validation data...")
         self.val_dataset = self.val_dataset.map(
             self._tokenize_data,
             batched=True,
-            batch_size=32,
+            batch_size=16,
             remove_columns=self.val_dataset.column_names,
-            desc="Tokenizing validation data",
-            load_from_cache_file=False
+            desc="Tokenizing validation data"
         )
+        
+        print("\nData preparation completed! Starting training...")
         
         self.logger.info("Data preparation completed")
 
