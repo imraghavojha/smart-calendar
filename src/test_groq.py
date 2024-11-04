@@ -6,7 +6,7 @@ def test_groq_connection():
     """Test Groq API connection"""
     try:
         # Initialize Groq client
-        client = Groq(api_key=os.getenv('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'))
+        client = Groq(api_key=os.getenv('GROQ_API_KEY'))
         
         # Test prompt
         test_prompt = """Given a calendar slot:
