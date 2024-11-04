@@ -111,14 +111,11 @@ class SchedulerTrainer:
         return model_inputs
 
     def train(self):
-        """Train the model with progress tracking"""
+        """Train the model with detailed progress tracking"""
         self.logger.info("Starting training...")
         
         # Calculate steps
         total_steps = len(self.train_dataset) * self.config['model']['epochs']
-        eval_steps = 100  # Must be a divisor of save_steps
-        save_steps = 100  # Must be equal to or multiple of eval_steps
-        
         self.logger.info(f"Total training steps: {total_steps}")
         
         # Prepare training arguments
@@ -131,36 +128,56 @@ class SchedulerTrainer:
             warmup_steps=self.config['model']['warmup_steps'],
             weight_decay=self.config['model']['weight_decay'],
             logging_dir=str(self.model_dir / 'logs'),
-            logging_steps=50,
-            eval_steps=eval_steps,           # Using variable
-            save_steps=save_steps,           # Using variable
+            logging_steps=1,          # Log every step
+            eval_steps=10,            # Evaluate more frequently
+            save_steps=10,            # Save more frequently
             evaluation_strategy="steps",
-            save_total_limit=2,
+            save_strategy="steps",
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             report_to="tensorboard",
-            disable_tqdm=False
+            disable_tqdm=False,
+            remove_unused_columns=False,  # Added for stability
+            gradient_checkpointing=True,  # Added for memory efficiency
+            fp16=False,                  # Disable mixed precision
+            dataloader_num_workers=0      # Single worker for stability
         )
         
-        # Initialize trainer with callbacks
+        # Progress callback
+        class ProgressCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                if state.global_step % 1 == 0:  # Print every step
+                    print(f"\nStep {state.global_step}/{state.max_steps}")
+                    if state.log_history:
+                        last_log = state.log_history[-1]
+                        print(f"Loss: {last_log.get('loss', 'N/A'):.4f}")
+                        print(f"Learning rate: {last_log.get('learning_rate', 'N/A'):.6f}")
+        
+        # Initialize trainer
         trainer = Trainer(
             model=self.model,
             args=training_args,
             train_dataset=self.train_dataset,
             eval_dataset=self.val_dataset,
             tokenizer=self.tokenizer,
-            callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
+            callbacks=[
+                EarlyStoppingCallback(early_stopping_patience=3),
+                ProgressCallback()
+            ]
         )
         
-        # Train with progress tracking
         try:
+            print("\nStarting training loop...")
             trainer.train()
             self.logger.info("Training completed successfully!")
         except Exception as e:
             self.logger.error(f"Training failed: {str(e)}", exc_info=True)
             raise
         finally:
+            print("\nSaving model regardless of training outcome...")
             self.save_model()
+
+            
     def save_model(self):
         """Save the trained model"""
         self.logger.info("Saving model...")
