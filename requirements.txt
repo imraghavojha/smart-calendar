@@ -4,8 +4,9 @@ requests
 python-dotenv
 pytz
 icalendar
-transformers[torch]==4.36.0
-torch
+transformers==4.33.0
+torch==2.0.1
+accelerate==0.20.3
 datasets
 scikit-learn
 tqdm
@@ -14,4 +15,3 @@ protobuf
 psutil
 tensorboard
 pandas
-accelerate>=0.20.1
