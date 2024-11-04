@@ -1,6 +1,7 @@
-from calendar_manager import CalendarManager
-from rules_parser import RulesManager
-from smart_scheduler import SmartScheduler
+# Fix imports to use src prefix
+from src.calendar_manager import CalendarManager
+from src.rules_parser import RulesManager
+from src.smart_scheduler import SmartScheduler
 import logging
 
 def test_scheduling():
@@ -43,7 +44,7 @@ def test_scheduling():
             print("\nFailed to schedule task")
         
     except Exception as e:
-        logger.error(f"Test failed: {str(e)}")
+        logger.error(f"Test failed: {str(e)}", exc_info=True)
 
 if __name__ == "__main__":
     test_scheduling()

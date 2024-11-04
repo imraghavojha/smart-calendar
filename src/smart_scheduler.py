@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 import pytz
 from typing import Dict, Optional
 import logging
-from .calendar_manager import CalendarManager
-from .rules_parser import RulesManager
+from src.calendar_manager import CalendarManager
+from src.rules_parser import RulesManager
 
 class SmartScheduler:
     def __init__(self, calendar_manager: CalendarManager, rules_manager: RulesManager):
