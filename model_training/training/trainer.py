@@ -116,9 +116,12 @@ class SchedulerTrainer:
         
         # Calculate steps
         total_steps = len(self.train_dataset) * self.config['model']['epochs']
+        eval_steps = 100  # Must be a divisor of save_steps
+        save_steps = 100  # Must be equal to or multiple of eval_steps
+        
         self.logger.info(f"Total training steps: {total_steps}")
         
-        # Prepare training arguments with aligned steps
+        # Prepare training arguments
         training_args = TrainingArguments(
             output_dir=str(self.model_dir / 'checkpoints'),
             num_train_epochs=self.config['model']['epochs'],
@@ -129,8 +132,8 @@ class SchedulerTrainer:
             weight_decay=self.config['model']['weight_decay'],
             logging_dir=str(self.model_dir / 'logs'),
             logging_steps=50,
-            eval_steps=100,            # Changed from 200
-            save_steps=100,            # Changed from 500 to match eval_steps
+            eval_steps=eval_steps,           # Using variable
+            save_steps=save_steps,           # Using variable
             evaluation_strategy="steps",
             save_total_limit=2,
             load_best_model_at_end=True,
@@ -158,7 +161,6 @@ class SchedulerTrainer:
             raise
         finally:
             self.save_model()
-
     def save_model(self):
         """Save the trained model"""
         self.logger.info("Saving model...")
