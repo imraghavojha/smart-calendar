@@ -15,5 +15,5 @@ RUN mkdir -p config cache
 # Environment variables will be passed during runtime
 ENV PYTHONPATH=/app
 
-# Change to test smart_scheduler
-CMD ["python", "-m", "src.smart_scheduler"]
+# Run scheduler test
+CMD ["python", "-m", "src.scheduler_test"]
