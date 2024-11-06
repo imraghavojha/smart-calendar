@@ -5,5 +5,4 @@ python-dotenv
 pytz
 icalendar
 groq
-python-dotenv
 anthropic

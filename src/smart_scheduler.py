@@ -13,68 +13,110 @@ class SmartScheduler:
         self.rules_manager = rules_manager
         self.groq_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
         self.logger = logging.getLogger(__name__)
-        self.timezone = pytz.timezone('America/Chicago')  # Change to your timezone
+        self.timezone = pytz.timezone('Asia/Kolkata')  # Adjust to your timezone
 
+   # In the schedule_task method, add logging:
     def schedule_task(self, task: Dict) -> Optional[Dict]:
-        """
-        Schedule a task using Groq's AI
-        
-        Args:
-            task: {
-                "name": str,
-                "duration": str (e.g., "2 hours"),
-                "deadline": str (e.g., "tomorrow 5pm"),
-                "priority": str (optional, e.g., "high")
-            }
-        """
+        """Schedule a task using Groq's AI"""
         try:
             # Get current calendar context
             context = self._get_calendar_context()
             
-            # Create prompt
+            # Create prompt for Groq
             prompt = self._create_scheduling_prompt(task, context)
+            print("\nSending prompt to Groq:")
+            print(prompt)
             
-            # Get AI suggestion
+            # Get AI scheduling suggestion
             completion = self.groq_client.chat.completions.create(
                 model="mixtral-8x7b-32768",
                 messages=[
-                    {"role": "system", "content": "You are an intelligent calendar assistant who helps schedule tasks optimally."},
+                    {"role": "system", "content": "You are an intelligent calendar assistant that helps schedule tasks optimally."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
             )
             
-            # Parse and validate suggestion
+            # Log the response
+            print("\nGroq Response:")
+            print(completion.choices[0].message.content)
+            
+            # Parse the AI response
             schedule = self._parse_ai_response(completion.choices[0].message.content)
             
             if schedule:
+                print("\nParsed Schedule:")
+                print(f"Start Time: {schedule['start_time']}")
+                print(f"End Time: {schedule['end_time']}")
+                print(f"Reason: {schedule['reason']}")
+                
                 # Create calendar event
                 event = self.calendar_manager.add_event(
                     summary=task['name'],
                     start_time=schedule['start_time'],
                     end_time=schedule['end_time'],
-                    description=f"Auto-scheduled task\nDuration: {task['duration']}\nDeadline: {task['deadline']}\nReason: {schedule['reason']}"
+                    description=f"Auto-scheduled task\nDuration: {task['duration']}\n"
+                              f"Deadline: {task['deadline']}\nReason: {schedule['reason']}"
                 )
                 return event
-            
-            return None
-            
+            else:
+                print("\nFailed to parse schedule from response")
+                
         except Exception as e:
-            self.logger.error(f"Error scheduling task: {str(e)}")
+            self.logger.error(f"Error scheduling task: {str(e)}", exc_info=True)
+            return None
+
+    def _parse_ai_response(self, response: str) -> Optional[Dict]:
+        """Parse Groq's response into schedule details"""
+        try:
+            print("\nParsing response:")
+            lines = response.strip().split('\n')
+            schedule = {}
+            
+            for line in lines:
+                print(f"Processing line: {line}")
+                if line.startswith('START_TIME:'):
+                    time_str = line.replace('START_TIME:', '').strip()
+                    print(f"Found start time: {time_str}")
+                    schedule['start_time'] = datetime.strptime(
+                        time_str, 
+                        '%Y-%m-%d %H:%M'
+                    ).replace(tzinfo=self.timezone)
+                    
+                elif line.startswith('END_TIME:'):
+                    time_str = line.replace('END_TIME:', '').strip()
+                    print(f"Found end time: {time_str}")
+                    schedule['end_time'] = datetime.strptime(
+                        time_str, 
+                        '%Y-%m-%d %H:%M'
+                    ).replace(tzinfo=self.timezone)
+                    
+                elif line.startswith('REASON:'):
+                    schedule['reason'] = line.replace('REASON:', '').strip()
+                    print(f"Found reason: {schedule['reason']}")
+            
+            if all(k in schedule for k in ['start_time', 'end_time', 'reason']):
+                return schedule
+            else:
+                print("Missing required fields in schedule")
+                print(f"Found fields: {list(schedule.keys())}")
+                
+        except Exception as e:
+            self.logger.error(f"Error parsing AI response: {str(e)}", exc_info=True)
             return None
 
     def _get_calendar_context(self) -> Dict:
         """Get current calendar state and constraints"""
-        # Get upcoming week's events
+        # Get next week's events
         now = datetime.now(self.timezone)
         week_later = now + timedelta(days=7)
         
         upcoming_events = self.calendar_manager.list_events(
-            start_time=now,
-            end_time=week_later
+            start_date=now,
+            end_date=week_later
         )
         
-        # Get rules and constraints
+        # Get scheduling rules and constraints
         constraints = self.rules_manager.get_scheduling_constraints()
         
         return {
@@ -86,7 +128,7 @@ class SmartScheduler:
 
     def _create_scheduling_prompt(self, task: Dict, context: Dict) -> str:
         """Create detailed prompt for Groq"""
-        prompt = f"""Please help schedule this task optimally:
+        prompt = f"""Help schedule this task optimally:
 
 Task Details:
 - Name: {task['name']}
@@ -105,29 +147,21 @@ Fixed Events:"""
         for block in context['blocked_times']:
             prompt += f"\n- {block['summary']} on {block['days']} from {block['start_time']} to {block['end_time']}"
 
-        prompt += "\n\nUpcoming Events:"
-        for event in context['events']:
-            start = event.get('start', {}).get('dateTime', '')
-            end = event.get('end', {}).get('dateTime', '')
-            prompt += f"\n- {event['summary']} from {start} to {end}"
-
         prompt += "\n\nPreferences:"
         for pref in context['preferences']:
             prompt += f"\n- {pref}"
 
-        prompt += """\n\nBased on this information, please suggest the optimal time slot for this task.
-Consider:
-1. Task deadline and duration
-2. Fixed events and blocked times
-3. User preferences
-4. Energy levels throughout the day
-5. Buffer time between tasks
-
-Provide your response in exactly this format:
+        prompt += """\n\nYou must provide the optimal time slot in EXACTLY this format (including the labels):
 START_TIME: YYYY-MM-DD HH:MM
 END_TIME: YYYY-MM-DD HH:MM
-REASON: Brief explanation of why this time slot is optimal"""
+REASON: Brief explanation
 
+For example:
+START_TIME: 2024-11-06 09:00
+END_TIME: 2024-11-06 11:00
+REASON: Early morning slot when energy is high and no conflicts
+
+Do not include any other text in your response."""
         return prompt
 
     def _parse_ai_response(self, response: str) -> Optional[Dict]:
@@ -154,38 +188,9 @@ REASON: Brief explanation of why this time slot is optimal"""
                 elif line.startswith('REASON:'):
                     schedule['reason'] = line.replace('REASON:', '').strip()
             
-            # Validate schedule
             if all(k in schedule for k in ['start_time', 'end_time', 'reason']):
                 return schedule
-            
+                
         except Exception as e:
             self.logger.error(f"Error parsing AI response: {str(e)}")
-        
-        return None
-
-# Test the scheduler
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    
-    # Initialize components
-    calendar = CalendarManager()
-    rules = RulesManager(calendar)
-    scheduler = SmartScheduler(calendar, rules)
-    
-    # Test task
-    test_task = {
-        "name": "Write Project Proposal",
-        "duration": "2 hours",
-        "deadline": "tomorrow 5pm",
-        "priority": "high"
-    }
-    
-    # Try scheduling
-    result = scheduler.schedule_task(test_task)
-    
-    if result:
-        print(f"\nTask scheduled successfully!")
-        print(f"Event: {result['summary']}")
-        print(f"Time: {result['start']['dateTime']} to {result['end']['dateTime']}")
-    else:
-        print("\nFailed to schedule task")
+            return None
