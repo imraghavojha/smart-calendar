@@ -75,6 +75,9 @@ class SmartScheduler:
             
             for line in lines:
                 print(f"Processing line: {line}")
+                # Remove any escape characters from the line
+                line = line.replace('\_', '_')
+                
                 if line.startswith('START_TIME:'):
                     time_str = line.replace('START_TIME:', '').strip()
                     print(f"Found start time: {time_str}")
@@ -154,7 +157,7 @@ Fixed Events:"""
         for pref in context['preferences']:
             prompt += f"\n- {pref}"
 
-        prompt += """\n\nProvide the optimal time slot in EXACTLY this format (use current year and realistic dates):
+        prompt += """\n\nProvide the optimal time slot in EXACTLY this format (using plain text, no escape characters):
 START_TIME: YYYY-MM-DD HH:MM
 END_TIME: YYYY-MM-DD HH:MM
 REASON: Brief explanation

@@ -17,49 +17,36 @@ def test_scheduling():
         rules = RulesManager(calendar)
         scheduler = SmartScheduler(calendar, rules)
         
-        # Test Cases
+        # Calculate timestamps
+        tz = pytz.timezone('Asia/Kolkata')
+        current_time = datetime.now(tz)
+        today_noon = current_time.replace(hour=12, minute=0, second=0, microsecond=0)
+        
+        # Edge Case Test Tasks
         test_cases = [
-            # Test Case 1: Study task in morning
-            {
-                'name': 'Study for Database Exam',
-                'duration': '2h',
-                'deadline': (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'),
-                'type': 'study',
-                'priority': 'high'
-            },
-            
-            # Test Case 2: Short coding task
-            {
-                'name': 'Debug Frontend Issue',
-                'duration': '45m',
-                'deadline': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
-                'type': 'coding',
-                'priority': 'medium'
-            },
-            
-            # Test Case 3: Task with tight deadline
-            {
-                'name': 'Prepare Project Presentation',
-                'duration': '1h30m',
-                'deadline': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d') + ' 17:00',
-                'type': 'presentation',
-                'priority': 'high'
-            },
-            
-            # Test Case 4: Long study session
-            {
-                'name': 'Research Paper Reading',
-                'duration': '3h',
-                'deadline': (datetime.now() + timedelta(days=4)).strftime('%Y-%m-%d'),
-                'type': 'study',
-                'priority': 'medium'
-            }
-        ]
-
+    # Edge Case 7: Tight Schedule with Specific Time
+    {
+        'name': 'Client Meeting',
+        'duration': '1h',
+        'deadline': f"{current_time.strftime('%Y-%m-%d')} 14:00",  # Must happen before 2 PM
+        'type': 'meeting',
+        'priority': 'critical',
+        'preferred_time': '11:30'  # Should try to schedule at this specific time
+    },
+    
+    # Edge Case 8: Very Short Notice Task
+    {
+        'name': 'Emergency Team Sync',
+        'duration': '15m',
+        'deadline': current_time.strftime('%Y-%m-%d %H:%M'),  # Today's date and current time
+        'type': 'meeting',
+        'priority': 'urgent'
+    }
+]
         # Run each test case
         for i, task in enumerate(test_cases, 1):
             print(f"\n{'='*50}")
-            print(f"Running Test Case {i}:")
+            print(f"Running Edge Case {i}:")
             print(f"Task: {task['name']}")
             print(f"Type: {task['type']}")
             print(f"Duration: {task['duration']}")
@@ -70,17 +57,17 @@ def test_scheduling():
             result = scheduler.schedule_task(task)
             
             if result:
-                print(f"\nTest Case {i} - Success!")
+                print(f"\nEdge Case {i} - Success!")
                 print(f"Event: {result['summary']}")
                 print(f"Scheduled for: {result['start'].get('dateTime')} to {result['end'].get('dateTime')}")
                 print(f"Description: {result.get('description', '')}")
             else:
-                print(f"\nTest Case {i} - Failed to schedule task")
+                print(f"\nEdge Case {i} - Failed to schedule task")
 
     except Exception as e:
         logger.error(f"Test failed: {str(e)}", exc_info=True)
         raise
 
 if __name__ == "__main__":
-    print("Testing Smart Scheduler...")
+    print("Testing Smart Scheduler Edge Cases...")
     test_scheduling()
