@@ -13,9 +13,9 @@ class SmartScheduler:
         self.rules_manager = rules_manager
         self.groq_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
         self.logger = logging.getLogger(__name__)
-        self.timezone = pytz.timezone('Asia/Kolkata')  # Adjust to your timezone
+        # Initialize timezone properly
+        self.timezone = pytz.timezone('Asia/Kolkata')
 
-   # In the schedule_task method, add logging:
     def schedule_task(self, task: Dict) -> Optional[Dict]:
         """Schedule a task using Groq's AI"""
         try:
@@ -78,18 +78,16 @@ class SmartScheduler:
                 if line.startswith('START_TIME:'):
                     time_str = line.replace('START_TIME:', '').strip()
                     print(f"Found start time: {time_str}")
-                    schedule['start_time'] = datetime.strptime(
-                        time_str, 
-                        '%Y-%m-%d %H:%M'
-                    ).replace(tzinfo=self.timezone)
+                    # Create datetime with explicit timezone
+                    naive_dt = datetime.strptime(time_str, '%Y-%m-%d %H:%M')
+                    schedule['start_time'] = self.timezone.localize(naive_dt)
                     
                 elif line.startswith('END_TIME:'):
                     time_str = line.replace('END_TIME:', '').strip()
                     print(f"Found end time: {time_str}")
-                    schedule['end_time'] = datetime.strptime(
-                        time_str, 
-                        '%Y-%m-%d %H:%M'
-                    ).replace(tzinfo=self.timezone)
+                    # Create datetime with explicit timezone
+                    naive_dt = datetime.strptime(time_str, '%Y-%m-%d %H:%M')
+                    schedule['end_time'] = self.timezone.localize(naive_dt)
                     
                 elif line.startswith('REASON:'):
                     schedule['reason'] = line.replace('REASON:', '').strip()
@@ -128,15 +126,20 @@ class SmartScheduler:
 
     def _create_scheduling_prompt(self, task: Dict, context: Dict) -> str:
         """Create detailed prompt for Groq"""
+        # Get tomorrow's date
+        tomorrow = datetime.now(self.timezone) + timedelta(days=1)
+        
         prompt = f"""Help schedule this task optimally:
 
 Task Details:
 - Name: {task['name']}
 - Duration: {task['duration']}
 - Deadline: {task['deadline']}
+{f"- Type: {task['type']}" if 'type' in task else ""}
 {f"- Priority: {task['priority']}" if 'priority' in task else ""}
 
 Current Calendar Context:
+Current date: {datetime.now(self.timezone).strftime('%Y-%m-%d')}
 
 Fixed Events:"""
         
@@ -151,46 +154,15 @@ Fixed Events:"""
         for pref in context['preferences']:
             prompt += f"\n- {pref}"
 
-        prompt += """\n\nYou must provide the optimal time slot in EXACTLY this format (including the labels):
+        prompt += """\n\nProvide the optimal time slot in EXACTLY this format (use current year and realistic dates):
 START_TIME: YYYY-MM-DD HH:MM
 END_TIME: YYYY-MM-DD HH:MM
 REASON: Brief explanation
 
-For example:
-START_TIME: 2024-11-06 09:00
-END_TIME: 2024-11-06 11:00
-REASON: Early morning slot when energy is high and no conflicts
+Focus on:
+1. Respecting preferences (morning for study, afternoon for coding)
+2. Avoiding conflicts with fixed events
+3. Staying within working hours (not during sleep time)
+4. Using current year dates"""
 
-Do not include any other text in your response."""
         return prompt
-
-    def _parse_ai_response(self, response: str) -> Optional[Dict]:
-        """Parse Groq's response into schedule details"""
-        try:
-            lines = response.strip().split('\n')
-            schedule = {}
-            
-            for line in lines:
-                if line.startswith('START_TIME:'):
-                    time_str = line.replace('START_TIME:', '').strip()
-                    schedule['start_time'] = datetime.strptime(
-                        time_str, 
-                        '%Y-%m-%d %H:%M'
-                    ).replace(tzinfo=self.timezone)
-                    
-                elif line.startswith('END_TIME:'):
-                    time_str = line.replace('END_TIME:', '').strip()
-                    schedule['end_time'] = datetime.strptime(
-                        time_str, 
-                        '%Y-%m-%d %H:%M'
-                    ).replace(tzinfo=self.timezone)
-                    
-                elif line.startswith('REASON:'):
-                    schedule['reason'] = line.replace('REASON:', '').strip()
-            
-            if all(k in schedule for k in ['start_time', 'end_time', 'reason']):
-                return schedule
-                
-        except Exception as e:
-            self.logger.error(f"Error parsing AI response: {str(e)}")
-            return None

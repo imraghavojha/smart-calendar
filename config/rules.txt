@@ -1,15 +1,15 @@
 # Class Schedule
-Calculus class MW 4pm-9pm
-Physics lab on Tuesday 2pm-5pm
-Database class TTh 10am-11:30am
+CLASS:Calculus|MW|16:00-21:00
+CLASS:Physics Lab|TUE|14:00-17:00
+CLASS:Database|TTH|10:00-11:30
 
 # Sleep Schedule
-I sleep between 11pm-7am
-
-# Preferences
-I prefer to study in mornings
-I prefer coding tasks in afternoon
+SLEEP|DAILY|23:00-07:00
 
 # Blocked Times
-No tasks on Sunday
-Don't schedule anything on Saturday after 2pm
+BLOCK|SUN|00:00-23:59
+BLOCK|SAT|14:00-23:59
+
+# Preferences
+PREFER:Study Tasks|MORNING|08:00-12:00
+PREFER:Coding Tasks|AFTERNOON|13:00-17:00

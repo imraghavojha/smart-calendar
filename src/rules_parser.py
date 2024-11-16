@@ -78,38 +78,32 @@ class RulesManager:
     def parse_rule(self, rule):
         """Parse a single rule and categorize it"""
         try:
-            rule = rule.lower()
             print(f"\nParsing rule: {rule}")
             
-            if self._is_class_schedule(rule):
-                self._handle_class_schedule(rule)
-            elif self._is_sleep_schedule(rule):
-                self._handle_sleep_schedule(rule)
-            elif self._is_preference(rule):
-                self._handle_preference(rule)
-            elif self._is_blocked_day(rule):
-                self._handle_blocked_day(rule)
+            # Split rule into components
+            parts = rule.split('|')
+            
+            if len(parts) >= 3:
+                rule_type = parts[0].upper()
+                
+                if rule_type.startswith('CLASS:'):
+                    self._handle_class_schedule(rule)
+                elif rule_type == 'SLEEP':
+                    self._handle_sleep_schedule(rule)
+                elif rule_type == 'BLOCK':
+                    self._handle_blocked_time(rule)
+                elif rule_type.startswith('PREFER:'):
+                    self._handle_preference(rule)
+                else:
+                    print(f"Unknown rule type: {rule_type}")
             else:
-                print(f"Unknown rule format: {rule}")
+                print(f"Invalid rule format: {rule}")
                 
         except Exception as e:
             print(f"Error parsing rule '{rule}': {e}")
 
-    def _is_class_schedule(self, rule):
-        class_patterns = [r'class', r'lecture', r'lab', r'seminar']
-        return any(pattern in rule for pattern in class_patterns)
-
-    def _is_sleep_schedule(self, rule):
-        return 'sleep' in rule
-
-    def _is_preference(self, rule):
-        preference_patterns = [r'prefer', r'like to', r'better in']
-        return any(pattern in rule for pattern in preference_patterns)
-
-    def _is_blocked_day(self, rule):
-        return 'no tasks' in rule or 'don\'t schedule' in rule
-
     def _parse_time(self, time_str):
+        """Parse time string into time object"""
         time_str = time_str.lower().strip()
         
         time_patterns = [
@@ -131,6 +125,7 @@ class RulesManager:
         raise ValueError(f"Couldn't parse time: {time_str}")
 
     def _parse_days(self, days_str):
+        """Parse day strings into day numbers"""
         days_map = {
             'm': 0, 'mon': 0, 'monday': 0,
             't': 1, 'tue': 1, 'tuesday': 1,
@@ -143,262 +138,156 @@ class RulesManager:
         
         days_str = days_str.lower()
         
-        # Special cases first
+        # Special cases
         if 'weekend' in days_str:
             return [5, 6]
         if 'weekday' in days_str:
             return [0, 1, 2, 3, 4]
+        if 'daily' in days_str:
+            return [0, 1, 2, 3, 4, 5, 6]
         if 'mw' in days_str:
             return [0, 2]
         if 'tth' in days_str:
             return [1, 3]
-        if 'tuesday' in days_str or (days_str.startswith('t ') or days_str == 't'):
+        if 'tue' in days_str:
             return [1]
-        if 'sunday' in days_str:
+        if 'sunday' in days_str or 'sun' in days_str:
             return [6]
-        if 'saturday' in days_str:
+        if 'saturday' in days_str or 'sat' in days_str:
             return [5]
         
         # Handle individual days
         days = []
         for day in re.findall(r'[mtwthfsa]{1,2}|monday|tuesday|wednesday|thursday|friday|saturday|sunday', days_str):
-            if day in days_map:
-                days.append(days_map[day])
+            if day.lower() in days_map:
+                days.append(days_map[day.lower()])
                 
         return sorted(list(set(days)))
 
     def _handle_class_schedule(self, rule):
+        """Handle class schedule rules"""
         try:
-            times = re.findall(r'\d+(?::\d+)?\s*(?:am|pm)?', rule)
-            if len(times) >= 2:
-                start_time = self._parse_time(times[0])
-                end_time = self._parse_time(times[1])
+            parts = rule.split('|')
+            if len(parts) >= 3:
+                class_name = parts[0].replace('CLASS:', '')
+                days_str = parts[1]
+                time_str = parts[2]
                 
-                # Extract days
-                if 'mw' in rule:
-                    days = [0, 2]
-                elif 'tth' in rule:
-                    days = [1, 3]
-                else:
-                    days_match = re.search(r'(?:on\s+)?([mtwthfsa]+|monday|tuesday|wednesday|thursday|friday|saturday|sunday)', rule)
-                    if days_match:
-                        days = self._parse_days(days_match.group(1))
-                    else:
-                        days = []
+                # Parse days
+                days = self._parse_days(days_str)
                 
-                if days:
-                    class_name = re.search(r'(\w+)(?:\s+class|\s+lab|\s+lecture|\s+seminar)', rule)
-                    summary = f"{class_name.group(1).title() if class_name else 'Class'}"
+                # Parse times
+                times = time_str.split('-')
+                if len(times) == 2:
+                    start_time = self._parse_time(times[0])
+                    end_time = self._parse_time(times[1])
                     
                     self.fixed_events.append({
-                        'summary': summary,
+                        'summary': class_name,
                         'days': days,
                         'start_time': start_time,
                         'end_time': end_time,
                         'type': 'class'
                     })
-                    print(f"Added class schedule: {summary} on days {days} from {start_time} to {end_time}")
+                    print(f"Added class schedule: {class_name} on days {days} from {start_time} to {end_time}")
                 else:
-                    print(f"Could not determine days for rule: {rule}")
-        
+                    print(f"Invalid time format in class rule: {time_str}")
         except Exception as e:
-            print(f"Error parsing class schedule: {e}")
+            print(f"Error handling class schedule: {e}")
 
     def _handle_sleep_schedule(self, rule):
+        """Handle sleep schedule rules"""
         try:
-            times = re.findall(r'\d+(?::\d+)?\s*(?:am|pm)?', rule)
-            if len(times) >= 2:
-                start_time = self._parse_time(times[0])
-                end_time = self._parse_time(times[1])
-                
-                self.blocked_times.append({
-                    'summary': 'Sleep Time',
-                    'days': [0, 1, 2, 3, 4, 5, 6],
-                    'start_time': start_time,
-                    'end_time': end_time,
-                    'type': 'sleep'
-                })
-                print(f"Added sleep schedule: {start_time} to {end_time}")
+            parts = rule.split('|')
+            if len(parts) >= 3:
+                time_str = parts[2]
+                times = time_str.split('-')
+                if len(times) == 2:
+                    start_time = self._parse_time(times[0])
+                    end_time = self._parse_time(times[1])
+                    
+                    self.blocked_times.append({
+                        'summary': 'Sleep Time',
+                        'days': [0, 1, 2, 3, 4, 5, 6],
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'type': 'sleep'
+                    })
+                    print(f"Added sleep schedule: {start_time} to {end_time}")
+                else:
+                    print(f"Invalid time format in sleep rule: {time_str}")
         except Exception as e:
-            print(f"Error parsing sleep schedule: {e}")
+            print(f"Error handling sleep schedule: {e}")
+
+    def _handle_blocked_time(self, rule):
+        """Handle blocked time rules"""
+        try:
+            parts = rule.split('|')
+            if len(parts) >= 3:
+                days_str = parts[1]
+                time_str = parts[2]
+                
+                # Parse days
+                days = self._parse_days(days_str)
+                
+                # Parse times
+                times = time_str.split('-')
+                if len(times) == 2:
+                    start_time = self._parse_time(times[0])
+                    end_time = self._parse_time(times[1])
+                    
+                    self.blocked_times.append({
+                        'summary': 'Blocked Time',
+                        'days': days,
+                        'start_time': start_time,
+                        'end_time': end_time,
+                        'type': 'blocked'
+                    })
+                    print(f"Added blocked time: days {days} from {start_time} to {end_time}")
+                else:
+                    print(f"Invalid time format in blocked time rule: {time_str}")
+        except Exception as e:
+            print(f"Error handling blocked time: {e}")
 
     def _handle_preference(self, rule):
+        """Handle preference rules"""
         self.preferences.append(rule)
         print(f"Added preference: {rule}")
-
-    def _handle_blocked_day(self, rule):
-        rule = rule.lower()
-        days = []
-        
-        if 'sunday' in rule:
-            days = [6]
-        elif 'saturday' in rule:
-            days = [5]
-        else:
-            days_match = re.search(r'(?:on\s+)?([mtwthfsa]+|monday|tuesday|wednesday|thursday|friday|saturday|sunday)', rule)
-            if days_match:
-                days = self._parse_days(days_match.group(1))
-        
-        # Check for specific time
-        times = re.findall(r'\d+(?::\d+)?\s*(?:am|pm)?', rule)
-        if times and 'after' in rule:
-            start_time = self._parse_time(times[0])
-            end_time = time(23, 59)
-        else:
-            start_time = time(0, 0)
-            end_time = time(23, 59)
-        
-        if days:
-            self.blocked_times.append({
-                'summary': 'Blocked Time',
-                'days': days,
-                'start_time': start_time,
-                'end_time': end_time,
-                'type': 'blocked_day'
-            })
-            print(f"Added blocked time: days {days} from {start_time} to {end_time}")
-        else:
-            print(f"Could not determine days for blocked time rule: {rule}")
 
     def add_fixed_events_to_calendar(self):
         """Add all fixed events to the calendar"""
         start_date = datetime.now(self.timezone)
-        end_date = start_date + timedelta(weeks=1)  # Reduced to 1 week instead of 4
+        end_date = start_date + timedelta(weeks=1)
         
         print("\nAdding fixed events to calendar:")
         for event in self.fixed_events + self.blocked_times:
             current_date = start_date
             while current_date <= end_date:
                 if current_date.weekday() in event['days']:
-                    # Handle overnight events (like sleep schedule)
-                    if event['type'] == 'sleep' and event['start_time'] > event['end_time']:
-                        # Create two events: one for evening and one for morning
-                        # Evening part (e.g., 11pm to midnight)
-                        evening_start = datetime.combine(
-                            current_date.date(),
-                            event['start_time']
-                        ).replace(tzinfo=self.timezone)
-                        
-                        evening_end = datetime.combine(
-                            current_date.date(),
-                            time(23, 59, 59)
-                        ).replace(tzinfo=self.timezone)
-                        
-                        # Morning part (e.g., midnight to 7am)
-                        morning_start = datetime.combine(
-                            current_date.date() + timedelta(days=1),
-                            time(0, 0)
-                        ).replace(tzinfo=self.timezone)
-                        
-                        morning_end = datetime.combine(
-                            current_date.date() + timedelta(days=1),
-                            event['end_time']
-                        ).replace(tzinfo=self.timezone)
-                        
-                        print(f"Adding {event['summary']} (overnight) on {current_date.strftime('%A')}")
-                        
+                    event_start = datetime.combine(
+                        current_date.date(),
+                        event['start_time']
+                    ).replace(tzinfo=self.timezone)
+                    
+                    event_end = datetime.combine(
+                        current_date.date(),
+                        event['end_time']
+                    ).replace(tzinfo=self.timezone)
+                    
+                    # Only add if end time is after start time
+                    if event_end > event_start:
+                        print(f"Adding {event['summary']} on {current_date.strftime('%A')}")
                         self.calendar_manager.add_event(
-                            summary=event['summary'] + " (Part 1)",
-                            start_time=evening_start,
-                            end_time=evening_end,
+                            summary=event['summary'],
+                            start_time=event_start,
+                            end_time=event_end,
                             description=f"Fixed event: {event['type']}"
                         )
-                        
-                        self.calendar_manager.add_event(
-                            summary=event['summary'] + " (Part 2)",
-                            start_time=morning_start,
-                            end_time=morning_end,
-                            description=f"Fixed event: {event['type']}"
-                        )
-                        
-                    else:
-                        # Normal event handling
-                        event_start = datetime.combine(
-                            current_date.date(),
-                            event['start_time']
-                        ).replace(tzinfo=self.timezone)
-                        
-                        event_end = datetime.combine(
-                            current_date.date(),
-                            event['end_time']
-                        ).replace(tzinfo=self.timezone)
-                        
-                        # Only add if end time is after start time
-                        if event_end > event_start:
-                            print(f"Adding {event['summary']} on {current_date.strftime('%A')}")
-                            self.calendar_manager.add_event(
-                                summary=event['summary'],
-                                start_time=event_start,
-                                end_time=event_end,
-                                description=f"Fixed event: {event['type']}"
-                            )
                 
                 current_date += timedelta(days=1)
 
-def create_test_rules():
-    return """# Class Schedule
-Calculus class MW 4pm-9pm
-Physics lab on Tuesday 2pm-5pm
-Database class TTh 10am-11:30am
-
-# Sleep Schedule
-I sleep between 11pm-7am
-
-# Preferences
-I prefer to study in mornings
-I prefer coding tasks in afternoon
-
-# Blocked Times
-No tasks on Sunday
-Don't schedule anything on Saturday after 2pm"""
-
-def run_tests():
-    print("\n=== Testing Rules System ===\n")
-    
-    try:
-        # Initialize calendar manager
-        print("1. Initializing Calendar Manager...")
-        calendar = CalendarManager()
-        
-        # Initialize rules manager
-        print("\n2. Initializing Rules Manager...")
-        rules = RulesManager(calendar)
-        
-        # Create and write test rules
-        print("\n3. Creating test rules...")
-        test_rules = create_test_rules()
-        rules.rules_file.parent.mkdir(exist_ok=True)
-        rules.rules_file.write_text(test_rules)
-        print(f"Test rules written to: {rules.rules_file}")
-        
-        # Load and parse rules
-        print("\n4. Loading and parsing rules...")
-        rules.load_rules()
-        
-        # Print parsed constraints
-        print("\n5. Parsed Constraints:")
-        
-        print("\nFixed Events:")
-        for event in rules.fixed_events:
-            print(f"- {event['summary']}: days {event['days']} from {event['start_time']} to {event['end_time']}")
-        
-        print("\nBlocked Times:")
-        for block in rules.blocked_times:
-            print(f"- {block['summary']}: days {block['days']} from {block['start_time']} to {block['end_time']}")
-        
-        print("\nPreferences:")
-        for pref in rules.preferences:
-            print(f"- {pref}")
-        
-        # Add events to calendar
-        print("\n6. Adding fixed events to calendar...")
-        rules.add_fixed_events_to_calendar()
-        
-        print("\nTest completed successfully!")
-        
-    except Exception as e:
-        print(f"\nTest failed with error: {e}")
-        raise
-
 if __name__ == "__main__":
-    run_tests()
+    # This section is for testing the rules parser directly
+    calendar = CalendarManager()
+    rules = RulesManager(calendar)
+    rules.load_rules()
